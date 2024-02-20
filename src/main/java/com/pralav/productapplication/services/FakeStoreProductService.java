@@ -2,6 +2,7 @@ package com.pralav.productapplication.services;
 
 import com.pralav.productapplication.dtos.ProductRequestDto;
 import com.pralav.productapplication.dtos.ProductResponseDto;
+import com.pralav.productapplication.exception.InvalidProductIdException;
 import com.pralav.productapplication.models.Category;
 import com.pralav.productapplication.models.Product;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,14 +13,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RequestCallback;
-import org.springframework.web.client.ResponseExtractor;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 
 @Service
@@ -42,8 +41,10 @@ public class FakeStoreProductService implements IProductService{
 
 
     @Override
-    public Product getSingleProduct(Long id) {
+    public Product getSingleProduct(Long id) throws InvalidProductIdException {
 
+        if(id >20)
+            throw new InvalidProductIdException();
         // I should pass 'id' to fakestore and get the details of this product
         ProductResponseDto forObject = restTemplate.getForObject("https://fakestoreapi.com/products/" + id,
                 ProductResponseDto.class);
@@ -52,13 +53,21 @@ public class FakeStoreProductService implements IProductService{
 
     @Override
     public List<Product> getAllProducts() {
-        ResponseEntity<ProductResponseDto[]> forObject = restTemplate.getForEntity("https://fakestoreapi.com/products/",
+//        // Option 1
+//        ResponseEntity<ProductResponseDto[]> forObject = restTemplate.getForEntity("https://fakestoreapi.com/products/",
+//                ProductResponseDto[].class);
+//        List<ProductResponseDto> productList = Arrays.asList(forObject.getBody());
+//        List<Product> products = new ArrayList<>();
+//        for(ProductResponseDto productResponseDto : productList) {
+//            products.add(getProductFromReesponseDto(productResponseDto));
+//        }
+
+        //Option 2
+        ProductResponseDto[] productResponseDtos = restTemplate.getForObject("https://fakestoreapi.com/products/",
                 ProductResponseDto[].class);
-        List<ProductResponseDto> productList = Arrays.asList(forObject.getBody());
         List<Product> products = new ArrayList<>();
-        for(ProductResponseDto productResponseDto : productList) {
-            products.add(getProductFromReesponseDto(productResponseDto));
-        }
+        for(ProductResponseDto prd : productResponseDtos)
+            products.add(getProductFromReesponseDto(prd));
         return products;
     }
 
@@ -71,15 +80,18 @@ public class FakeStoreProductService implements IProductService{
     }
 
     @Override
-    public Product updateProduct(Long id, ProductRequestDto product) {
-        ProductResponseDto productResponseDto = new ProductResponseDto();
-        productResponseDto.setTitle(product.getTitle());
-        productResponseDto.setPrice(product.getPrice());
-        productResponseDto.setDescription(product.getDescription());
-        productResponseDto.setImage(product.getImage());
-        productResponseDto.setCategory(product.getCategory());
-        ProductResponseDto productResponseDto1 = restTemplate.patchForObject("https://fakestoreapi.com/products/" + id, productResponseDto, ProductResponseDto.class, id);
+    public Product updateProduct(Long id, ProductRequestDto productRequestDto) {
+        RequestCallback requestCallback = restTemplate.httpEntityCallback(productRequestDto,ProductResponseDto.class);
+        HttpMessageConverterExtractor<ProductResponseDto> responseExtractor = new HttpMessageConverterExtractor(ProductResponseDto.class, restTemplate.getMessageConverters());
+        ProductResponseDto execute = restTemplate.execute("https://fakestoreapi.com/products/" + id, HttpMethod.PUT, requestCallback, responseExtractor);
+        return getProductFromReesponseDto(execute);
+    }
 
-        return getProductFromReesponseDto(productResponseDto1);
+    @Override
+    public Boolean deleteProduct(Long id) throws InvalidProductIdException {
+        if(id >20)
+            throw new InvalidProductIdException();
+        restTemplate.delete("https://fakestoreapi.com/products/"+id);
+        return true;
     }
 }
